@@ -18,23 +18,31 @@
 """
 import os
 import sys
+import json
+import time
+import ast
+import urllib
+import requests
 
-from pytx.access_token import access_token
-from pytx import ThreatDescriptor
-from pytx import ThreatIndicator
-from pytx.vocabulary import ThreatDescriptor as td
-from pymisp import PyMISP # MISP API
+# Import MISP API
+from pymisp import PyMISP
 
 
-def retrieveEventsFromFacebook():
-	indicators = ThreatIndicator.objects(
-		limit=1000,
-	)
+def retrieveMalwareAnalysesLast24h():
+	app_id = os.environ['TX_APP_ID']
+	app_secret = os.environ['TX_APP_SECRET']
+	end_time = int(time.time()) # NOW
+	start_time = end_time - (24 * 3600) # NOW - 24h
 	
-	for indicator in indicators:
-		print indicator  # debug
-
-	return indicators
+	query_params = urllib.urlencode({
+    	'access_token' : app_id + '|' + app_secret,
+    	'since' : start_time,
+    	'until' : end_time
+    	})
+	
+	r = requests.get('https://graph.facebook.com/v2.8/malware_analyses?' + query_params)
+	
+	print json.dumps(ast.literal_eval(r.text), sort_keys=True,indent=4,separators=(',', ': '))
 
 
 """
@@ -46,10 +54,8 @@ def main():
 		print("Facebook Threat Exchange credential unavailable :'(.")
 		sys.exit(-1)
 
-	print("READY to GO :)") # DEBUG
-
 	# Retrieve event from Facebook
-	retrieveEventsFromFacebook()
+	retrieveMalwareAnalysesLast24h() #TEST!!
 
 	# All done ;)
 	return
