@@ -16,10 +16,11 @@
 		https://developers.facebook.com/docs/threat-exchange/reference/apis/threat-indicators/v2.8
 
 	TODO:
-		- credential management
+	-----
 		- fine control over MISP event creation
 		- switch to Python 3.4 (see warnings)
-		- create a class for Facebook
+		- add command line parameters (to control behaviour, pass auth to FB...)
+		- improve handler for params (function to generate structure) -> code duplication!!
 """
 import os
 import sys
@@ -32,14 +33,16 @@ import requests
 # Import MISP API
 from pymisp import PyMISP
 
+# --------------------------------------------------------------------------- #
+
 class FacebookTE():
 	app_id = None
 	app_secret = None
 
+
 	def __init__(self, app_id, app_secret):
 		self.app_id = app_id
 		self.app_secret = app_secret
-
 
 
 	def retrieveMalwareAnalysesLastNDays(self, numbdays):
@@ -50,18 +53,31 @@ class FacebookTE():
 		end_time = int(time.time()) # NOW
 		start_time = end_time - numbdays * (24 * 3600)
 		
-		query_params = urllib.urlencode({
-    		'access_token' : self.app_id + '|' + self.app_secret,
+		query_params = {
     		'since' : start_time,
     		'until' : end_time
-    		})
+    	}
 		
-		r = requests.get('https://graph.facebook.com/v2.8/malware_analyses?' + query_params)
-		
-		print json.dumps(ast.literal_eval(r.text), sort_keys=True,indent=4,separators=(',', ': '))
+		return self.__query_threat_exchange__("malware_analyses", query_params)
 	
 	
 	def retrieveThreatIndicatorsLastNDays(self, numbdays):
+		"""
+			Retrieve the list of published indicators
+			for the last numbdays.
+		"""	
+		end_time = int(time.time()) # NOW
+		start_time = end_time - numbdays * (24 * 3600) # NOW - 24h
+	
+		query_params = {
+    		'since' : start_time,
+    		'until' : end_time
+    	}
+		
+		return self.__query_threat_exchange__("threat_indicators", query_params)
+
+
+	def retrieveThreatDescriptorsLastNDays(self, numbdays):
 		"""
 			Retrieve the list of published indicators
 			for the last numbdays.
@@ -69,20 +85,44 @@ class FacebookTE():
 		end_time = int(time.time()) # NOW
 		start_time = end_time - numbdays * (24 * 3600) # NOW - 24h
 	
-		query_params = urllib.urlencode({
-    		'access_token' : self.app_id + '|' + self.app_secret,
+		query_params = {
     		'since' : start_time,
     		'until' : end_time
-    		})
+    	}
 		
-		r = requests.get('https://graph.facebook.com/v2.8/threat_indicators?' + query_params)
-		
-		print json.dumps(ast.literal_eval(r.text), sort_keys=True,indent=4,separators=(',', ': '))	
+		return self.__query_threat_exchange__("threat_descriptors", query_params)
+
 
 	def retrieveEvent(self, eventid):
 		print("NOT IMPLEMENTED")
 		return None
 
+
+	def __query_threat_exchange__(self, query_type, params={}):
+		"""
+			Generic function to query Facebook with URL format:
+			'https://graph.facebook.com/v2.8/<query_type>?' + query_params
+
+			checkout: 
+				https://developers.facebook.com/docs/threat-exchange/reference/apis/v2.8
+
+			params = hashtable containing all query option EXCEPT auth which will be added
+			         by this function
+		"""
+		try:
+			params['access_token'] = self.app_id + '|' + self.app_secret
+			uparams = urllib.urlencode(params)
+
+			uri = 'https://graph.facebook.com/v2.8/%s?' % query_type
+			request = requests.get(uri + uparams)
+			return json.dumps(ast.literal_eval(request.text), sort_keys=True,indent=4,separators=(',', ': '))	
+		except Exception as e:
+			print("Impossible to query %s" % query_type)
+			print(e)
+		return None
+
+
+# --------------------------------------------------------------------------- #
 
 """
     Main function
@@ -95,7 +135,7 @@ def main():
 
 	# Retrieve event from Facebook
 	fb = FacebookTE(os.environ['TX_APP_ID'], os.environ['TX_APP_SECRET'])
-	fb.retrieveThreatIndicatorsLastNDays(1) # TEST
+	print fb.retrieveThreatDescriptorsLastNDays(1) # TEST
 
 	# TODO - for each new publisehd Indicators, retrieve full object
 	# then pushed to MISP
@@ -103,6 +143,7 @@ def main():
 	# All done ;)
 	return
 
+# --------------------------------------------------------------------------- #
 
 """
    Call main function
