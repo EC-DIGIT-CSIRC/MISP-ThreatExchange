@@ -93,8 +93,40 @@ class FacebookTE():
 		return self.__query_threat_exchange__("threat_descriptors", query_params)
 
 
-	def retrieveEvent(self, eventid):
-		print("NOT IMPLEMENTED")
+	def retrieveEvent(self, eventid, params={}):
+		"""
+			Sample Event:
+			{
+    			"added_on": "2017-02-09T14:26:57+0000",
+    			"description": "IDS Detected Spam",
+    			"id": "1234567890",
+    			"indicator": {
+        			"id": "1234567890",
+        			"indicator": "11.22.33.44",
+        			"type": "IP_ADDRESS"
+    			},
+    			"owner": {
+        			"email": "foo\\u0040bar.com",
+        			"id": "987654321",
+        			"name": "FooBar ThreatExchange"
+    			},
+    			"privacy_type": "VISIBLE",
+    			"raw_indicator": "11.22.33.44",
+    			"share_level": "GREEN",
+    			"status": "MALICIOUS",
+    			"type": "IP_ADDRESS"
+			}
+		"""
+		try:
+			params['access_token'] = self.app_id + '|' + self.app_secret
+			uparams = urllib.urlencode(params)
+
+			uri = 'https://graph.facebook.com/%s?' % eventid
+			request = requests.get(uri + uparams)
+			return json.dumps(ast.literal_eval(request.text), sort_keys=True,indent=4,separators=(',', ': '))
+		except Exception as e:
+			print("Impossible to retrieve event %s" % eventid)
+			print(e)
 		return None
 
 
@@ -124,20 +156,58 @@ class FacebookTE():
 # --------------------------------------------------------------------------- #
 
 class MISP():
+	"""
+	"added_on": "2017-02-09T14:26:57+0000",
+    			"description": "IDS Detected Spam",
+    			"id": "1234567890",
+    			"indicator": {
+        			"id": "1234567890",
+        			"indicator": "11.22.33.44",
+        			"type": "IP_ADDRESS"
+    			},
+    			"owner": {
+        			"email": "foo\\u0040bar.com",
+        			"id": "987654321",
+        			"name": "FooBar ThreatExchange"
+    			},
+    			"privacy_type": "VISIBLE",
+    			"raw_indicator": "11.22.33.44",
+    			"share_level": "GREEN",
+    			"status": "MALICIOUS",
+    			"type": "IP_ADDRESS"
+
+
+	"""
 	api = ""
 	url = ""
-	misp = 
+	misp = ""
 	sslCheck = False # Not recommended
 	debug = True     # Enable debug mode
 
+	# ThreatExchange type -> MISP type
+	# see IndicatorType object
+	# 	https://developers.facebook.com/docs/threat-exchange/reference/apis/indicator-type/v2.8
 	type_map = {
 		"URI" : "url",
+		"IP_ADDRESS" : "ip-dst" #Add mutliple attributes ip-dst and ip-src??
+	}
+
+	# ThreatExchange -> MISP
+	field_map = {
+		"description" : "info"
+
+	}
+
+	# Skeleton of MISP event to publish (will be converted to JSON)
+	event = {
+		"published": False,
+		"Attribute" : []
 	}
 
 	def __init__(self, url, api):
 		self.url = url
 		self.api = api
-		self.misp = pymisp.api.PyMISP(self.url, self.key, ssl=self.sslCheck, out_type=’json’, debug=self.debug, proxies=None, cert=None)
+		self.misp = pymisp.api.PyMISP(self.url, self.key, ssl=self.sslCheck, out_type='json', debug=self.debug, proxies=None, cert=None)
 		return
 
 
@@ -165,7 +235,9 @@ def main():
 
 	# Retrieve event from Facebook
 	fb = FacebookTE(os.environ['TX_APP_ID'], os.environ['TX_APP_SECRET'])
-	print fb.retrieveThreatDescriptorsLastNDays(1) # TEST
+	threats = json.loads(fb.retrieveThreatDescriptorsLastNDays(1))
+	for event in threats["data"]:
+		print(event)
 
 	# TODO - for each new publisehd Indicators, retrieve full object
 	# then pushed to MISP
