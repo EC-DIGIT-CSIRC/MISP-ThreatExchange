@@ -121,6 +121,36 @@ class FacebookTE():
 			print(e)
 		return None
 
+# --------------------------------------------------------------------------- #
+
+class MISP():
+	api = ""
+	url = ""
+	misp = 
+	sslCheck = False # Not recommended
+	debug = True     # Enable debug mode
+
+	type_map = {
+		"URI" : "url",
+	}
+
+	def __init__(self, url, api):
+		self.url = url
+		self.api = api
+		self.misp = pymisp.api.PyMISP(self.url, self.key, ssl=self.sslCheck, out_type=’json’, debug=self.debug, proxies=None, cert=None)
+		return
+
+
+	def convertTEtoMISP(self, teevent):
+		print("NOT IMPLEMENTED")
+		return
+
+
+	def createEvent(self, event={}):
+		jevent = json.dumps(event)
+		print("NOT IMPLEMENTED")
+		# create the event
+		return
 
 # --------------------------------------------------------------------------- #
 
