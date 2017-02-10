@@ -33,6 +33,9 @@ import requests
 # Import MISP API
 from pymisp import PyMISP
 
+# Import configuration.py with API keys
+import configuration
+
 # --------------------------------------------------------------------------- #
 
 class FacebookTE():
@@ -181,6 +184,7 @@ class MISP():
 	api = ""
 	url = ""
 	misp = ""
+	proxies = None
 	sslCheck = False # Not recommended
 	debug = True     # Enable debug mode
 
@@ -204,10 +208,11 @@ class MISP():
 		"Attribute" : []
 	}
 
-	def __init__(self, url, api):
+	def __init__(self, url, api, proxies=None):
 		self.url = url
 		self.api = api
-		self.misp = pymisp.api.PyMISP(self.url, self.key, ssl=self.sslCheck, out_type='json', debug=self.debug, proxies=None, cert=None)
+		self.proxies = proxies
+		self.misp = PyMISP(self.url, self.api, ssl=self.sslCheck, out_type='json', debug=self.debug, proxies=self.proxies, cert=None)
 		return
 
 
@@ -218,8 +223,7 @@ class MISP():
 
 	def createEvent(self, event={}):
 		jevent = json.dumps(event)
-		print("NOT IMPLEMENTED")
-		# create the event
+		self.misp.add_event(jevent)
 		return
 
 # --------------------------------------------------------------------------- #
@@ -229,18 +233,19 @@ class MISP():
 """
 def main():
 	# Validate if credential for Facebook are available
-	if 'TX_APP_ID' not in os.environ or 'TX_APP_SECRET' not in os.environ:
-		print("Facebook Threat Exchange credential unavailable :'(.")
-		sys.exit(-1)
+	#if 'TX_APP_ID' not in os.environ or 'TX_APP_SECRET' not in os.environ:
+	#	print("Facebook Threat Exchange credential unavailable :'(.")
+	#	sys.exit(-1)
 
 	# Retrieve event from Facebook
-	fb = FacebookTE(os.environ['TX_APP_ID'], os.environ['TX_APP_SECRET'])
-	threats = json.loads(fb.retrieveThreatDescriptorsLastNDays(1))
-	for event in threats["data"]:
-		print(event)
+	#fb = FacebookTE(configuration.TX_APP_ID, configuration.TX_APP_SECRET)
+	#threats = json.loads(fb.retrieveThreatDescriptorsLastNDays(1))
+	#for event in threats["data"]:
+	#	print(event)
 
 	# TODO - for each new publisehd Indicators, retrieve full object
 	# then pushed to MISP
+	misp = MISP(configuration.MISP_URI, configuration.MISP_API, configuration.PROXIES)
 
 	# All done ;)
 	return
