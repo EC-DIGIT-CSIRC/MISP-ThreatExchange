@@ -6,6 +6,31 @@
         "status": null
     },
     "Sharing": {
-        "WHITE": "white"
+        "AMBER": {
+            "colour": "#f8ba09",
+            "exportable": true,
+            "hide_tag": false,
+            "id": "3",
+            "name": "tlp:amber"
+        },
+        "GREEN": {
+            "colour": "#13fd4b",
+            "exportable": true,
+            "hide_tag": false,
+            "id": "2",
+            "name": "tlp:green"
+        },
+        "WHITE": {
+            "colour": "#ffffff",
+            "exportable": true,
+            "hide_tag": false,
+            "id": "1",
+            "name": "tlp:white"
+        }
+    },
+    "Type": {
+        "DOMAIN": "domain",
+        "IP_ADDRESS": "ip-dst",
+        "URI": "url"
     }
 }

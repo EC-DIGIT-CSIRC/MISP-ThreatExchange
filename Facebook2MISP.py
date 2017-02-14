@@ -19,6 +19,7 @@
 		- fine control over MISP event creation
 		- switch to Python 3.4 (see warnings)
 		- add command line parameters (to control behaviour, pass auth to FB...)
+		- remove all internal structure to JSON file
 
 	Version: 0.000000001 :)
 """
@@ -162,26 +163,7 @@ class FacebookTE():
 
 class MISP():
 	"""
-	"added_on": "2017-02-09T14:26:57+0000",
-    			"description": "IDS Detected Spam",
-    			"id": "1234567890",
-    			"indicator": {
-        			"id": "1234567890",
-        			"indicator": "11.22.33.44",
-        			"type": "IP_ADDRESS"
-    			},
-    			"owner": {
-        			"email": "foo\\u0040bar.com",
-        			"id": "987654321",
-        			"name": "FooBar ThreatExchange"
-    			},
-    			"privacy_type": "VISIBLE",
-    			"raw_indicator": "11.22.33.44",
-    			"share_level": "GREEN",
-    			"status": "MALICIOUS",
-    			"type": "IP_ADDRESS"
-
-
+		Handle manipulation of event into MISP
 	"""
 	api = ""
 	url = ""
@@ -195,7 +177,8 @@ class MISP():
 	# 	https://developers.facebook.com/docs/threat-exchange/reference/apis/indicator-type/v2.8
 	type_map = {
 		"URI" : "url",
-		"IP_ADDRESS" : "ip-dst" #Add mutliple attributes ip-dst and ip-src??
+		"IP_ADDRESS" : "ip-dst", #Add mutliple attributes ip-dst and ip-src??
+		"DOMAIN" : "domain",
 	}
 
 	# ThreatExchange -> MISP
@@ -208,15 +191,30 @@ class MISP():
 	}
 
 	share_levels = {
-		"WHITE" : "white"
-	}
-
-
-	# Skeleton of MISP event to publish (will be converted to JSON)
-	event = {
-		"published": False,
-		"info": "Import from Facebook ThreatExchange",
-		"Attribute" : []
+		"WHITE" :
+	        {
+                "id": "1",
+                "name": "tlp:white",
+                "colour": "#ffffff",
+                "exportable": True,
+                "hide_tag": False
+            }, 
+		"GREEN" : 
+			{
+                "id": "2",
+                "name": "tlp:green",
+                "colour": "#13fd4b",
+                "exportable": True,
+                "hide_tag": False
+            },
+        "AMBER" :
+            {
+                "id": "3",
+                "name": "tlp:amber",
+                "colour": "#f8ba09",
+                "exportable": True,
+                "hide_tag": False
+            }
 	}
 
 
@@ -229,28 +227,67 @@ class MISP():
 
 
 	def convertTEtoMISP(self, teevent):
-		mispevt = self.event.copy()
+		"""
+			convert a ThreatExchange entry to MISP entry
+		"""
+		# Skeleton of MISP event to publish (will be converted to JSON)
+		mispevt = {
+			"published": False,
+			"info": "Import from Facebook ThreatExchange",
+			"Attribute" : [],
+			"Tag" : [],
+		}
+
+		# Add populated attributes
 		attribute = {}
 		for field in self.field_map.keys():
 			if field in teevent.keys():
 				if self.field_map[field] is not None:
-					attribute[self.field_map[field]] = teevent[field]
+					attribute[self.field_map[field]] = teevent[field].replace("\\", "") # not to brutal??
+
+		# Add type of attribute
+		if "type" in teevent.keys():
+			if teevent["type"] in self.type_map.keys():
+				attribute["type"] = self.type_map[teevent["type"]]
+			else:
+				print("WARNING: TYPE %s SHOULD BE ADDED TO MAPPING" % teevent["type"])
+
+
+		# Add a category
+		attribute["category"] = "Network activity"
+
+		# Add new attriute to event
 		mispevt["Attribute"].append(attribute)
+
+		# Add sharing indicators (tags)
+		if "share_level" in teevent.keys():
+			if teevent["share_level"] in self.share_levels.keys():
+				mispevt["Tag"].append(self.share_levels[teevent["share_level"]])
+			else:
+				print("WARNING: SHARING LEVEL %s SHOULD BE ADDED TO MAPPING" % teevent["share_level"])
+
+		# all done :)
 		return mispevt
 
 
 	def createEvent(self, event={}):
-		jevent = json.dumps(event)
-		print("DEBUG - would add %s" % jevent)
-		#misp_event = self.misp.add_event(jevent)
-		#return misp_event
-		return None # Temp debug
+		"""
+			Create a new event in MISP using a hash table structure describing the event
+		"""
+		jevent = json.dumps(event, sort_keys=True,indent=4,separators=(',', ': '))
+		print("DEBUG, event to add: %s" % jevent)
+		misp_event = self.misp.add_event(jevent)
+		return misp_event
 
 
 	def saveMapping(self, mapfile="./mapping.json"):
+		"""
+			Save internal mapping definition
+		"""
 		mappings = {
 			"Sharing" : self.share_levels,
-			"Fields" : self.field_map,
+			"Fields"  : self.field_map,
+			"Type"    : self.type_map,
 		}
 		try:
 			fd = open(mapfile, "w")
@@ -263,13 +300,18 @@ class MISP():
 
 
 	def loadMapping(self, mapfile="./mapping.json"):
+		"""
+			Restore internal mapping from saved JSON file
+		"""
 		try:
 			fd = open(mapfile, "r")
 			mappings = json.load(fd)
 			if "Sharing" in mappings.keys():
 				self.share_levels = mappings["Sharing"]
 			if "Fields" in mapping.keys():
-				self.field_map = mapings["Fields"]
+				self.field_map = mappings["Fields"]
+			if "Type" in mapping.keys():
+				self.type_map = mappings["Type"]
 			fd.close()
 		except Exception as e:
 			print("IMPOSSIBLE TO LOAD MAPPINGS from %s" % mapfile)
@@ -284,6 +326,7 @@ def fromFacebookToMISP():
 	if configuration.MISP_PROXY:
 		proxies = configuration.PROXIES
 	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
+	misp.saveMapping() #TEMP - DEBUG -- to replace by a load
 
 	# Connect to Facebook Threat Exchange	
 	proxies = None
@@ -296,6 +339,8 @@ def fromFacebookToMISP():
 	for event in threats["data"]:
 		mispevent = misp.convertTEtoMISP(event)
 		jmispevent = misp.createEvent(mispevent)
+		print("DEBUG: %s" % jmispevent)
+		break #DEBUG - don't kill MISP ;)
 
 	# All done ;)
 	return
