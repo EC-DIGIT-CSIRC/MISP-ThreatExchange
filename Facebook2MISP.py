@@ -9,7 +9,6 @@
 
 	POC version (actually not yet a poc, too much missing code)!! 
 
-	To run, set TX_APP_ID and TX_APP_SECRET
 
 	Note - Python API dropped - easier to use web queries
 		API well described here: 
@@ -20,7 +19,8 @@
 		- fine control over MISP event creation
 		- switch to Python 3.4 (see warnings)
 		- add command line parameters (to control behaviour, pass auth to FB...)
-		- improve handler for params (function to generate structure) -> code duplication!!
+
+	Version: 0.000000001 :)
 """
 import os
 import sys
@@ -41,11 +41,13 @@ import configuration
 class FacebookTE():
 	app_id = None
 	app_secret = None
+	proxy = None
 
 
-	def __init__(self, app_id, app_secret):
+	def __init__(self, app_id, app_secret, proxy=None):
 		self.app_id = app_id
 		self.app_secret = app_secret
+		self.proxy = proxy
 
 
 	def retrieveMalwareAnalysesLastNDays(self, numbdays):
@@ -61,7 +63,7 @@ class FacebookTE():
     		'until' : end_time
     	}
 		
-		return self.__query_threat_exchange__("malware_analyses", query_params)
+		return json.loads(self.__query_threat_exchange__("malware_analyses", query_params))
 	
 	
 	def retrieveThreatIndicatorsLastNDays(self, numbdays):
@@ -77,7 +79,7 @@ class FacebookTE():
     		'until' : end_time
     	}
 		
-		return self.__query_threat_exchange__("threat_indicators", query_params)
+		return json.loads(self.__query_threat_exchange__("threat_indicators", query_params))
 
 
 	def retrieveThreatDescriptorsLastNDays(self, numbdays):
@@ -93,7 +95,7 @@ class FacebookTE():
     		'until' : end_time
     	}
 		
-		return self.__query_threat_exchange__("threat_descriptors", query_params)
+		return json.loads(self.__query_threat_exchange__("threat_descriptors", query_params))
 
 
 	def retrieveEvent(self, eventid, params={}):
@@ -149,8 +151,8 @@ class FacebookTE():
 			uparams = urllib.urlencode(params)
 
 			uri = 'https://graph.facebook.com/v2.8/%s?' % query_type
-			request = requests.get(uri + uparams)
-			return json.dumps(ast.literal_eval(request.text), sort_keys=True,indent=4,separators=(',', ': '))	
+			request = requests.get(uri + uparams, proxies=self.proxy)
+			return json.dumps(ast.literal_eval(request.text), sort_keys=True,indent=4,separators=(',', ': '))
 		except Exception as e:
 			print("Impossible to query %s" % query_type)
 			print(e)
@@ -186,7 +188,7 @@ class MISP():
 	misp = ""
 	proxies = None
 	sslCheck = False # Not recommended
-	debug = True     # Enable debug mode
+	debug = False     # Enable debug mode
 
 	# ThreatExchange type -> MISP type
 	# see IndicatorType object
@@ -197,16 +199,26 @@ class MISP():
 	}
 
 	# ThreatExchange -> MISP
+	# None mean no mapping
 	field_map = {
-		"description" : "info"
-
+		"description" : "comment",
+		"raw_indicator" : "value",
+		"owner" : None,
+		"status" : None
 	}
+
+	share_levels = {
+		"WHITE" : "white"
+	}
+
 
 	# Skeleton of MISP event to publish (will be converted to JSON)
 	event = {
 		"published": False,
+		"info": "Import from Facebook ThreatExchange",
 		"Attribute" : []
 	}
+
 
 	def __init__(self, url, api, proxies=None):
 		self.url = url
@@ -217,35 +229,84 @@ class MISP():
 
 
 	def convertTEtoMISP(self, teevent):
-		print("NOT IMPLEMENTED")
-		return
+		mispevt = self.event.copy()
+		attribute = {}
+		for field in self.field_map.keys():
+			if field in teevent.keys():
+				if self.field_map[field] is not None:
+					attribute[self.field_map[field]] = teevent[field]
+		mispevt["Attribute"].append(attribute)
+		return mispevt
 
 
 	def createEvent(self, event={}):
 		jevent = json.dumps(event)
-		self.misp.add_event(jevent)
+		print("DEBUG - would add %s" % jevent)
+		#misp_event = self.misp.add_event(jevent)
+		#return misp_event
+		return None # Temp debug
+
+
+	def saveMapping(self, mapfile="./mapping.json"):
+		mappings = {
+			"Sharing" : self.share_levels,
+			"Fields" : self.field_map,
+		}
+		try:
+			fd = open(mapfile, "w")
+			json.dump(mappings, fd, sort_keys=True,indent=4,separators=(',', ': '))
+			fd.close()
+		except Exception as e:
+			print("IMPOSSIBLE TO SAVE MAPPINGS to %s" % mapfile)
+			print(e)
+		return
+
+
+	def loadMapping(self, mapfile="./mapping.json"):
+		try:
+			fd = open(mapfile, "r")
+			mappings = json.load(fd)
+			if "Sharing" in mappings.keys():
+				self.share_levels = mappings["Sharing"]
+			if "Fields" in mapping.keys():
+				self.field_map = mapings["Fields"]
+			fd.close()
+		except Exception as e:
+			print("IMPOSSIBLE TO LOAD MAPPINGS from %s" % mapfile)
+			print(e)
 		return
 
 # --------------------------------------------------------------------------- #
+
+def fromFacebookToMISP():
+	# Open connection to MISP w/ proxy handling if required
+	proxies = None
+	if configuration.MISP_PROXY:
+		proxies = configuration.PROXIES
+	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
+
+	# Connect to Facebook Threat Exchange	
+	proxies = None
+	if configuration.TX_PROXY:
+		proxies = configuration.PROXIES
+	fb = FacebookTE(configuration.TX_APP_ID, configuration.TX_APP_SECRET, proxies)
+
+	# Retrieve event from Facebook
+	threats = fb.retrieveThreatDescriptorsLastNDays(1)
+	for event in threats["data"]:
+		mispevent = misp.convertTEtoMISP(event)
+		jmispevent = misp.createEvent(mispevent)
+
+	# All done ;)
+	return
 
 """
     Main function
 """
 def main():
-	# Validate if credential for Facebook are available
-	#if 'TX_APP_ID' not in os.environ or 'TX_APP_SECRET' not in os.environ:
-	#	print("Facebook Threat Exchange credential unavailable :'(.")
-	#	sys.exit(-1)
 
-	# Retrieve event from Facebook
-	#fb = FacebookTE(configuration.TX_APP_ID, configuration.TX_APP_SECRET)
-	#threats = json.loads(fb.retrieveThreatDescriptorsLastNDays(1))
-	#for event in threats["data"]:
-	#	print(event)
-
-	# TODO - for each new publisehd Indicators, retrieve full object
-	# then pushed to MISP
-	misp = MISP(configuration.MISP_URI, configuration.MISP_API, configuration.PROXIES)
+	# TODO - handle the other way round
+	fromFacebookToMISP()
 
 	# All done ;)
 	return
