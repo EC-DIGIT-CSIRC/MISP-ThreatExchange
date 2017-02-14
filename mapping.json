@@ -1,0 +1,11 @@
+{
+    "Fields": {
+        "description": "comment",
+        "owner": null,
+        "raw_indicator": "value",
+        "status": null
+    },
+    "Sharing": {
+        "WHITE": "white"
+    }
+}
