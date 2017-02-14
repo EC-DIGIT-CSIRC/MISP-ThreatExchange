@@ -164,6 +164,11 @@ class FacebookTE():
 class MISP():
 	"""
 		Handle manipulation of event into MISP
+
+		TODO:
+		    - use MISPEvent for creating MISP events
+		         check https://www.circl.lu/assets/files/misp-training/luxembourg2017/4.1-pymisp.pdf
+		    - use PyTaxonomies for Tags
 	"""
 	api = ""
 	url = ""
