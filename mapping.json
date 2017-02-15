@@ -1,9 +1,6 @@
 {
-    "Fields": {
-        "description": "comment",
-        "owner": null,
-        "raw_indicator": "value",
-        "status": null
+    "Privacy": {
+        "VISIBLE": 0
     },
     "Sharing": {
         "AMBER": {

@@ -20,7 +20,8 @@
 		- add command line parameters (to control behaviour, pass auth to FB...)
 		- remove all internal structure to JSON file
 		- keep reference to original ID in TE to avoid duplicates (history file)
-		- handle changes in status (UNKNOWN, MALICIOUS, NONMALICIOUS)
+		- handle changes in status (UNKNOWN, MALICIOUS, NONMALICIOUS) (update function)
+		- implement auto publish
 
 	Version: 0.000000002 :)
 
@@ -180,8 +181,16 @@ class MISP():
 	url = ""
 	misp = ""
 	proxies = None
-	sslCheck = False # Not recommended
+	sslCheck = False  # Not recommended
 	debug = False     # Enable debug mode
+	score = {
+		0 : "NON MALICIOUS",
+		1 : "UNKNOWN",
+		2 : "SUSPICIOUS",
+		3 : "MALICIOUS"
+	}
+	badness_threshold = 1
+	published = False 
 
 	# ThreatExchange type -> MISP type
 	# see IndicatorType object
@@ -219,19 +228,13 @@ class MISP():
                 "hide_tag": False
             }
 	}
-
-	extra_tag = {
-        "id": "63",
-        "name": "tlp:amber EC-only",
-        "colour": "#f8b907",
-        "exportable": True,
-        "hide_tag": False 
-                }
+	extra_tag = None
 
 	privacy_levels = {
 		"VISIBLE" : 0
 	}
 
+	# ----------------------------------------------------------------------- #
 
 	def __init__(self, url, api, proxies=None):
 		self.url = url
@@ -247,12 +250,12 @@ class MISP():
 		"""
 		# Create empty event
 		mispevt = MISPEvent()
-		mispevt.info = "Import from Facebook ThreatExchange"
-		mispevt.distibution = 0
+		mispevt.info = "[Facebook ThreatExchange]"
+		mispevt.distribution = 0
 		mispevt.sharing_group_id = self.privacy_levels[teevent["privacy_type"]]
 
-		# Check if event is for malicious information
-		if "status" in teevent.keys() and teevent["status"] != "MALICIOUS" and teevent["status"] != "SUSPICIOUS":
+		# Check if event is to be kept
+		if "status" in teevent.keys() and teevent["status"] in self.score.keys() and self.score[teevent["status"]] < self.badness_threshold :
 			print("IGNORE EVENT %s due to status (%s)" % (teevent, teevent["status"]))
 			return None
 
@@ -266,6 +269,7 @@ class MISP():
 					print("WARNING: TYPE %s SHOULD BE ADDED TO MAPPING" % teevent["type"])
 		else:
 			print("WARNING, event %s does not contains any indicator :(" % teevent)
+			return None # don't create event without content!
 
 		# Add a category
 		mispevt.category = "Network activity"
@@ -288,7 +292,8 @@ class MISP():
 			mispevt.Tag.append(self.extra_tag)
 
 		# all done :)
-		return mispevt
+		evtid = teevent["id"]
+		return [evtid, mispevt]
 
 
 	def createEvent(self, event):
@@ -299,10 +304,11 @@ class MISP():
 			return None
 
 		# Not empty event
-		jevent = json.dumps(event, cls=EncodeUpdate)
-		print("DEBUG: %s" % jevent)
+		[fteid, mispevt] = event 
+		jevent = json.dumps(mispevt, cls=EncodeUpdate)
 		misp_event = self.misp.add_event(jevent)
-		return misp_event
+		mispid = misp_event["id"]
+		return [mispid, fteid]
 
 
 	def saveMapping(self, mapfile="./mapping.json"):
@@ -354,7 +360,6 @@ def fromFacebookToMISP():
 	if configuration.MISP_PROXY:
 		proxies = configuration.PROXIES
 	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
-	#misp.saveMapping() #TEMP - DEBUG -- to replace by a load with param
 
 	# Connect to Facebook Threat Exchange	
 	proxies = None
@@ -366,7 +371,8 @@ def fromFacebookToMISP():
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	for event in threats["data"]:
 		mispevent = misp.convertTEtoMISP(event)
-		jmispevent = misp.createEvent(mispevent)
+		[fteid, mispid] = misp.createEvent(mispevent)
+		history[fteid] = mispid
 
 	# All done ;)
 	return
