@@ -5,10 +5,9 @@
 	Retrieve events from Facebook Threat Exchange and push them to MISP
 
 	Author: David DURVAUX
-	Copyright: EC DIGIT CSIRC - February 2017
+	Copyright: EC DIGIT CSIRC (European Commission) - February 2017
 
-	POC version (actually not yet a poc, too much missing code)!! 
-
+	!! POC version !! 
 
 	Note - Python API dropped - easier to use web queries
 		API well described here: 
@@ -20,8 +19,15 @@
 		- switch to Python 3.4 (see warnings)
 		- add command line parameters (to control behaviour, pass auth to FB...)
 		- remove all internal structure to JSON file
+		- keep reference to original ID in TE to avoid duplicates (history file)
+		- handle changes in status (UNKNOWN, MALICIOUS, NONMALICIOUS)
 
-	Version: 0.000000001 :)
+	Version: 0.000000002 :)
+
+	Thanks to
+		- Facebook for ThreatExchange
+		- MISP for MISP ;)
+		- Raphael Vinot and Alexandre Dulaunoy for tips and tricks
 """
 import os
 import sys
@@ -187,14 +193,6 @@ class MISP():
 	}
 
 	# ThreatExchange -> MISP
-	# None mean no mapping
-	field_map = {
-		"description" : "comment",
-		"raw_indicator" : "value",
-		"owner" : None,
-		"status" : None
-	}
-
 	share_levels = {
 		"WHITE" :
 	        {
@@ -222,6 +220,18 @@ class MISP():
             }
 	}
 
+	extra_tag = {
+        "id": "63",
+        "name": "tlp:amber EC-only",
+        "colour": "#f8b907",
+        "exportable": True,
+        "hide_tag": False 
+                }
+
+	privacy_levels = {
+		"VISIBLE" : 0
+	}
+
 
 	def __init__(self, url, api, proxies=None):
 		self.url = url
@@ -233,11 +243,18 @@ class MISP():
 
 	def convertTEtoMISP(self, teevent):
 		"""
-			convert a ThreatExchange entry to MISP entry
+			Convert a ThreatExchange entry to MISP entry
 		"""
 		# Create empty event
 		mispevt = MISPEvent()
 		mispevt.info = "Import from Facebook ThreatExchange"
+		mispevt.distibution = 0
+		mispevt.sharing_group_id = self.privacy_levels[teevent["privacy_type"]]
+
+		# Check if event is for malicious information
+		if "status" in teevent.keys() and teevent["status"] != "MALICIOUS" and teevent["status"] != "SUSPICIOUS":
+			print("IGNORE EVENT %s due to status (%s)" % (teevent, teevent["status"]))
+			return None
 
 		# Add indicator to event
 		if "raw_indicator" in teevent.keys():
@@ -253,12 +270,22 @@ class MISP():
 		# Add a category
 		mispevt.category = "Network activity"
 
+		# Enrich description
+		if "description" in teevent.keys():
+			mispevt.info = mispevt.info + " - %s" % teevent["description"]
+		if "owner" in teevent.keys() and "name" in teevent["owner"].keys():
+			owner = teevent["owner"]["name"]
+			email = teevent["owner"]["email"].replace("\\u0040", "@")
+			mispevt.info = mispevt.info + " - by %s (%s)" % (owner, email)
+
 		# Add sharing indicators (tags)
 		if "share_level" in teevent.keys():
 			if teevent["share_level"] in self.share_levels.keys():
 				mispevt.Tag.append(self.share_levels[teevent["share_level"]])
 			else:
 				print("WARNING: SHARING LEVEL %s SHOULD BE ADDED TO MAPPING" % teevent["share_level"])
+		if self.extra_tag is not None:
+			mispevt.Tag.append(self.extra_tag)
 
 		# all done :)
 		return mispevt
@@ -268,7 +295,12 @@ class MISP():
 		"""
 			Create a new event in MISP using a hash table structure describing the event
 		"""
+		if event is None:
+			return None
+
+		# Not empty event
 		jevent = json.dumps(event, cls=EncodeUpdate)
+		print("DEBUG: %s" % jevent)
 		misp_event = self.misp.add_event(jevent)
 		return misp_event
 
@@ -278,9 +310,10 @@ class MISP():
 			Save internal mapping definition
 		"""
 		mappings = {
-			"Sharing" : self.share_levels,
-			"Fields"  : self.field_map,
-			"Type"    : self.type_map,
+			"Sharing"   : self.share_levels,
+			"Type"      : self.type_map,
+			"Extra-Tag" : self.extra_tag,
+			"Privacy"   : self.privacy_levels
 		}
 		try:
 			fd = open(mapfile, "w")
@@ -301,10 +334,12 @@ class MISP():
 			mappings = json.load(fd)
 			if "Sharing" in mappings.keys():
 				self.share_levels = mappings["Sharing"]
-			if "Fields" in mapping.keys():
-				self.field_map = mappings["Fields"]
 			if "Type" in mapping.keys():
 				self.type_map = mappings["Type"]
+			if "Sharing" in mapping.keys():
+				self.sharing = mapping["Sharing"]
+			if "Privacy" in mapping.keys():
+				self.privacy_levels = mapping["Privacy"]
 			fd.close()
 		except Exception as e:
 			print("IMPOSSIBLE TO LOAD MAPPINGS from %s" % mapfile)
@@ -319,7 +354,7 @@ def fromFacebookToMISP():
 	if configuration.MISP_PROXY:
 		proxies = configuration.PROXIES
 	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
-	misp.saveMapping() #TEMP - DEBUG -- to replace by a load
+	#misp.saveMapping() #TEMP - DEBUG -- to replace by a load with param
 
 	# Connect to Facebook Threat Exchange	
 	proxies = None
