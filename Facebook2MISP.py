@@ -32,7 +32,7 @@ import urllib
 import requests
 
 # Import MISP API
-from pymisp import PyMISP
+from pymisp import PyMISP, MISPEvent, EncodeUpdate
 
 # Import configuration.py with API keys
 import configuration
@@ -235,39 +235,28 @@ class MISP():
 		"""
 			convert a ThreatExchange entry to MISP entry
 		"""
-		# Skeleton of MISP event to publish (will be converted to JSON)
-		mispevt = {
-			"published": False,
-			"info": "Import from Facebook ThreatExchange",
-			"Attribute" : [],
-			"Tag" : [],
-		}
+		# Create empty event
+		mispevt = MISPEvent()
+		mispevt.info = "Import from Facebook ThreatExchange"
 
-		# Add populated attributes
-		attribute = {}
-		for field in self.field_map.keys():
-			if field in teevent.keys():
-				if self.field_map[field] is not None:
-					attribute[self.field_map[field]] = teevent[field].replace("\\", "") # not to brutal??
-
-		# Add type of attribute
-		if "type" in teevent.keys():
-			if teevent["type"] in self.type_map.keys():
-				attribute["type"] = self.type_map[teevent["type"]]
-			else:
-				print("WARNING: TYPE %s SHOULD BE ADDED TO MAPPING" % teevent["type"])
-
+		# Add indicator to event
+		if "raw_indicator" in teevent.keys():
+			if "type" in teevent.keys():
+				if teevent["type"] in self.type_map.keys():
+					indicator = teevent["raw_indicator"].replace("\\", "")
+					mispevt.add_attribute(self.type_map[teevent["type"]] , indicator) # not to brutal??
+				else:
+					print("WARNING: TYPE %s SHOULD BE ADDED TO MAPPING" % teevent["type"])
+		else:
+			print("WARNING, event %s does not contains any indicator :(" % teevent)
 
 		# Add a category
-		attribute["category"] = "Network activity"
-
-		# Add new attriute to event
-		mispevt["Attribute"].append(attribute)
+		mispevt.category = "Network activity"
 
 		# Add sharing indicators (tags)
 		if "share_level" in teevent.keys():
 			if teevent["share_level"] in self.share_levels.keys():
-				mispevt["Tag"].append(self.share_levels[teevent["share_level"]])
+				mispevt.Tag.append(self.share_levels[teevent["share_level"]])
 			else:
 				print("WARNING: SHARING LEVEL %s SHOULD BE ADDED TO MAPPING" % teevent["share_level"])
 
@@ -275,12 +264,11 @@ class MISP():
 		return mispevt
 
 
-	def createEvent(self, event={}):
+	def createEvent(self, event):
 		"""
 			Create a new event in MISP using a hash table structure describing the event
 		"""
-		jevent = json.dumps(event, sort_keys=True,indent=4,separators=(',', ': '))
-		print("DEBUG, event to add: %s" % jevent)
+		jevent = json.dumps(event, cls=EncodeUpdate)
 		misp_event = self.misp.add_event(jevent)
 		return misp_event
 
@@ -344,8 +332,6 @@ def fromFacebookToMISP():
 	for event in threats["data"]:
 		mispevent = misp.convertTEtoMISP(event)
 		jmispevent = misp.createEvent(mispevent)
-		print("DEBUG: %s" % jmispevent)
-		break #DEBUG - don't kill MISP ;)
 
 	# All done ;)
 	return
