@@ -263,7 +263,7 @@ class MISP():
 		return [evtid, mispevt]
 
 
-	def createEvent(self, event):
+	def createEvent(self, mispevent):
 		"""
 			Create a new event in MISP using a hash table structure describing the event
 		"""
@@ -271,11 +271,10 @@ class MISP():
 			return None
 
 		# Not empty event
-		[fteid, mispevt] = event 
 		jevent = json.dumps(mispevt, cls=EncodeUpdate)
 		misp_event = self.misp.add_event(jevent)
 		mispid = misp_event["id"]
-		return [mispid, fteid]
+		return mispid
 
 
 	def saveMapping(self, mapfile="./mapping.json"):
@@ -321,14 +320,14 @@ class MISP():
 
 # --------------------------------------------------------------------------- #
 
-def fromFacebookToMISP(mapping="./mapping.json"):
+def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
 	# Open connection to MISP w/ proxy handling if required
 	proxies = None
 	if configuration.MISP_PROXY:
 		proxies = configuration.PROXIES
 	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
-	if mapping is not None:
-		misp.loadMapping(mapping)
+	if mapfile is not None:
+		misp.loadMapping(mapfile)
 
 	# Connect to Facebook Threat Exchange	
 	proxies = None
@@ -336,12 +335,35 @@ def fromFacebookToMISP(mapping="./mapping.json"):
 		proxies = configuration.PROXIES
 	fb = FacebookTE(configuration.TX_APP_ID, configuration.TX_APP_SECRET, proxies)
 
+	# Load history
+	history = {}
+	try:
+		fd = open(histfile, "r")
+		history = json.load(fd)
+		fd.close()
+	except Exception as e:
+		print("ERROR: impossible to load history from %s" % histfile)
+		print(e)
+
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	for event in threats["data"]:
-		mispevent = misp.convertTEtoMISP(event)
-		#[fteid, mispid] = misp.createEvent(mispevent)
-		#history[fteid] = mispid
+		[teevtid, mispevt] = misp.convertTEtoMISP(event)
+		if(teevtid not in history.keys():
+			mispid = misp.createEvent(mispevt)
+			history[teevtid] = mispid
+		else:
+			print("EVENT: %d already in MISP under ID: %d" % (teevtid, history[teevtid]))
+			print("DEBUG -- need to implement an update function -- TODO!!") # DEBUG / TODO
+
+	# Save history
+	try:
+		fd = open(histfile, "w")
+		json.dump(history, fd, sort_keys=True,indent=4,separators=(',', ': '))
+		fd.close()
+	except Exception as e:
+		print("ERROR: impossible to save history to %s" % histfile)
+		print(e)
 
 	# All done ;)
 	return
