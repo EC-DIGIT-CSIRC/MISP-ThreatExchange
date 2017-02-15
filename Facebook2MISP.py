@@ -31,11 +31,12 @@
 		- Raphael Vinot and Alexandre Dulaunoy for tips and tricks
 """
 import os
+import ast
 import sys
 import json
 import time
-import ast
 import urllib
+import argparse
 import requests
 
 # Import MISP API
@@ -181,58 +182,24 @@ class MISP():
 	url = ""
 	misp = ""
 	proxies = None
-	sslCheck = False  # Not recommended
-	debug = False     # Enable debug mode
-	score = {
+	sslCheck = False       # Not recommended
+	debug = False          # Enable debug mode
+	score = {              # Map Facebook Threat Exchange "status" to a score to determine if event will be made in MISP
 		0 : "NON MALICIOUS",
 		1 : "UNKNOWN",
 		2 : "SUSPICIOUS",
 		3 : "MALICIOUS"
 	}
-	badness_threshold = 1
-	published = False 
+	badness_threshold = 1  # Minimum score in score table to create a MISP event
+	published = False      # Default state of MISP created object
 
-	# ThreatExchange type -> MISP type
+	# ThreatExchange type -> MISP
 	# see IndicatorType object
 	# 	https://developers.facebook.com/docs/threat-exchange/reference/apis/indicator-type/v2.8
-	type_map = {
-		"URI" : "url",
-		"IP_ADDRESS" : "ip-dst", #Add mutliple attributes ip-dst and ip-src??
-		"DOMAIN" : "domain",
-	}
-
-	# ThreatExchange -> MISP
-	share_levels = {
-		"WHITE" :
-	        {
-                "id": "1",
-                "name": "tlp:white",
-                "colour": "#ffffff",
-                "exportable": True,
-                "hide_tag": False
-            }, 
-		"GREEN" : 
-			{
-                "id": "2",
-                "name": "tlp:green",
-                "colour": "#13fd4b",
-                "exportable": True,
-                "hide_tag": False
-            },
-        "AMBER" :
-            {
-                "id": "3",
-                "name": "tlp:amber",
-                "colour": "#f8ba09",
-                "exportable": True,
-                "hide_tag": False
-            }
-	}
-	extra_tag = None
-
-	privacy_levels = {
-		"VISIBLE" : 0
-	}
+	type_map = {}          # Map of Facebook Threat Exchange to MISP types
+	share_levels = {}      # Map of sharing levels (TLP -> TLP)
+	extra_tag = None       # Extra tag to add to all imported events (! no check of consistency !)
+	privacy_levels = {}    # Map the privacy_type of Facebook Threat Exchange to Sharing Group ID of MISP
 
 	# ----------------------------------------------------------------------- #
 
@@ -340,12 +307,12 @@ class MISP():
 			mappings = json.load(fd)
 			if "Sharing" in mappings.keys():
 				self.share_levels = mappings["Sharing"]
-			if "Type" in mapping.keys():
+			if "Type" in mappings.keys():
 				self.type_map = mappings["Type"]
-			if "Sharing" in mapping.keys():
-				self.sharing = mapping["Sharing"]
-			if "Privacy" in mapping.keys():
-				self.privacy_levels = mapping["Privacy"]
+			if "Extra-Tag" in mappings.keys():
+				self.extra_tag = mappings["Extra-Tag"]
+			if "Privacy" in mappings.keys():
+				self.privacy_levels = mappings["Privacy"]
 			fd.close()
 		except Exception as e:
 			print("IMPOSSIBLE TO LOAD MAPPINGS from %s" % mapfile)
@@ -354,12 +321,14 @@ class MISP():
 
 # --------------------------------------------------------------------------- #
 
-def fromFacebookToMISP():
+def fromFacebookToMISP(mapping="./mapping.json"):
 	# Open connection to MISP w/ proxy handling if required
 	proxies = None
 	if configuration.MISP_PROXY:
 		proxies = configuration.PROXIES
 	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
+	if mapping is not None:
+		misp.loadMapping(mapping)
 
 	# Connect to Facebook Threat Exchange	
 	proxies = None
@@ -371,8 +340,8 @@ def fromFacebookToMISP():
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	for event in threats["data"]:
 		mispevent = misp.convertTEtoMISP(event)
-		[fteid, mispid] = misp.createEvent(mispevent)
-		history[fteid] = mispid
+		#[fteid, mispid] = misp.createEvent(mispevent)
+		#history[fteid] = mispid
 
 	# All done ;)
 	return
@@ -381,9 +350,27 @@ def fromFacebookToMISP():
     Main function
 """
 def main():
+	# State
+	mapping = None
+	history = None
+
+	# Parse command line arguments
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-m', '--mapping', action='store', dest='mapping', help='Path to JSON mapping file.  By default, ./mapping.json', default='./mapping.json')
+	parser.add_argument('-H', '--history', action='store', dest='history', help='Path to JSON history file.  By default, ./history.json', default='./history.json')
+
+	# Parse arguments and configure the script
+	arguments = parser.parse_args()
+	if arguments.mapping:
+		if not os.path.isfile(arguments.mapping):
+			print("ERROR: %s has to be an existing mapping file!" % arguments.mapping)
+			parser.print_help()
+			sys.exit(-1)
+		else:
+			mapping = arguments.mapping
 
 	# TODO - handle the other way round
-	fromFacebookToMISP()
+	fromFacebookToMISP(mapping)
 
 	# All done ;)
 	return
