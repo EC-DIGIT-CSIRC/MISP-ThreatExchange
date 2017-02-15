@@ -41,8 +41,8 @@ MISP_PROXY=False                # set to True if proxy has to be used to communi
 # Proxy configuration
 # PROXIES = None if no proxy are required.  Otherwise, put the following format
 PROXIES= {
-	'http'  : "http://<user>:<pass>@<proxy addr>:<proxy port>",
-	'https' : "http://<user>:<pass>@<proxy addr>:<proxy port>"
+	'http'  : "http://[user]:[pass]@[proxy addr]:[proxy port]",
+	'https' : "http://[user]:[pass]@[proxy addr]:[proxy port]"
 }
 </pre>
 
