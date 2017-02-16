@@ -267,13 +267,13 @@ class MISP():
 		"""
 			Create a new event in MISP using a hash table structure describing the event
 		"""
-		if event is None:
+		if mispevent is None:
 			return None
 
 		# Not empty event
-		jevent = json.dumps(mispevt, cls=EncodeUpdate)
+		jevent = json.dumps(mispevent, cls=EncodeUpdate)
 		misp_event = self.misp.add_event(jevent)
-		mispid = misp_event["id"]
+		mispid = misp_event["Event"]["id"]
 		return mispid
 
 
@@ -337,19 +337,20 @@ def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
 
 	# Load history
 	history = {}
-	try:
-		fd = open(histfile, "r")
-		history = json.load(fd)
-		fd.close()
-	except Exception as e:
-		print("ERROR: impossible to load history from %s" % histfile)
-		print(e)
+	if os.path.isfile(histfile):
+		try:
+			fd = open(histfile, "r")
+			history = json.load(fd)
+			fd.close()
+		except Exception as e:
+			print("ERROR: impossible to load history from %s" % histfile)
+			print(e)
 
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	for event in threats["data"]:
 		[teevtid, mispevt] = misp.convertTEtoMISP(event)
-		if(teevtid not in history.keys():
+		if(teevtid not in history.keys()):
 			mispid = misp.createEvent(mispevt)
 			history[teevtid] = mispid
 		else:
