@@ -354,7 +354,7 @@ def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
 			mispid = misp.createEvent(mispevt)
 			history[teevtid] = mispid
 		else:
-			print("EVENT: %d already in MISP under ID: %d" % (teevtid, history[teevtid]))
+			print("EVENT: %s already in MISP under ID: %s" % (teevtid, history[teevtid]))
 			print("DEBUG -- need to implement an update function -- TODO!!") # DEBUG / TODO
 
 	# Save history
