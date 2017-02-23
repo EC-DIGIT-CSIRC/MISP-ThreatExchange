@@ -28,6 +28,10 @@
     "Type": {
         "DOMAIN": "domain",
         "IP_ADDRESS": "ip-dst",
-        "URI": "url"
+        "URI": "url",
+        "PE_COMPILE_TIMESTAMP" : "",
+        "PE_RSRC_SHA256": "",
+        "PE_SECTION_SHA256" : "",
+        "PE_VERSION_VALUE" : "",
     }
 }
