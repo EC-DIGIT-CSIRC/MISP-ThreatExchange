@@ -22,8 +22,14 @@
 		- keep reference to original ID in TE to avoid duplicates (history file)
 		- handle changes in status (UNKNOWN, MALICIOUS, NONMALICIOUS) (update function)
 		- implement auto publish
+		- control of https certificate (see https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings n)
 
-	Version: 0.000000002 :)
+	Version: 0.000000003 :)
+
+	CHANGE HISTORY:
+	---------------
+	    - switching to Python 3.x (script not compatible anymore with Python 2.x)
+	    
 
 	Thanks to
 		- Facebook for ThreatExchange
@@ -35,15 +41,23 @@ import ast
 import sys
 import json
 import time
-import urllib
+import urllib.parse
 import argparse
-import requests
+
+try:
+	import requests
+except:
+	print("requests us request, please install with pip install requests")
 
 # Import MISP API
-from pymisp import PyMISP, MISPEvent, EncodeUpdate
+try:
+	from pymisp import PyMISP, MISPEvent, EncodeUpdate
+except:
+	print("requests us request, please install with pip install pymisp")
 
 # Import configuration.py with API keys
 import configuration
+
 
 # --------------------------------------------------------------------------- #
 
@@ -104,7 +118,12 @@ class FacebookTE():
     		'until' : end_time
     	}
 		
-		return json.loads(self.__query_threat_exchange__("threat_descriptors", query_params))
+		fb_result = self.__query_threat_exchange__("threat_descriptors", query_params)
+		if fb_result is not None:
+			return json.loads(fb_result)
+		else:
+			print("WARNING: no events retrieve from Facebook")
+			return None
 
 
 	def retrieveEvent(self, eventid, params={}):
@@ -133,7 +152,7 @@ class FacebookTE():
 		"""
 		try:
 			params['access_token'] = self.app_id + '|' + self.app_secret
-			uparams = urllib.urlencode(params)
+			uparams = urllib.parse.urlencode(params)
 
 			uri = 'https://graph.facebook.com/%s?' % eventid
 			request = requests.get(uri + uparams)
@@ -157,7 +176,7 @@ class FacebookTE():
 		"""
 		try:
 			params['access_token'] = self.app_id + '|' + self.app_secret
-			uparams = urllib.urlencode(params)
+			uparams = urllib.parse.urlencode(params)
 
 			uri = 'https://graph.facebook.com/v2.8/%s?' % query_type
 			request = requests.get(uri + uparams, proxies=self.proxy)
@@ -304,6 +323,7 @@ class MISP():
 		try:
 			fd = open(mapfile, "r")
 			mappings = json.load(fd)
+			print("DEBUG MAPPINGS: %s" % mappings)
 			if "Sharing" in mappings.keys():
 				self.share_levels = mappings["Sharing"]
 			if "Type" in mappings.keys():
@@ -319,6 +339,13 @@ class MISP():
 		return
 
 # --------------------------------------------------------------------------- #
+
+def mergeFacebookEvents(events):
+	"""
+		Merge multiple-linked events to a single MISP one
+	"""
+	return
+
 
 def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
 	# Open connection to MISP w/ proxy handling if required
@@ -348,14 +375,18 @@ def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
 
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
-	for event in threats["data"]:
-		[teevtid, mispevt] = misp.convertTEtoMISP(event)
-		if(teevtid not in history.keys()):
-			mispid = misp.createEvent(mispevt)
-			history[teevtid] = mispid
-		else:
-			print("EVENT: %s already in MISP under ID: %s" % (teevtid, history[teevtid]))
-			print("DEBUG -- need to implement an update function -- TODO!!") # DEBUG / TODO
+	if threats is not None:
+		for event in threats["data"]:
+			[teevtid, mispevt] = misp.convertTEtoMISP(event)
+			if(teevtid not in history.keys()):
+				mispid = misp.createEvent(mispevt)
+				history[teevtid] = mispid
+			else:
+				print("EVENT: %s already in MISP under ID: %s" % (teevtid, history[teevtid]))
+				print("DEBUG -- need to implement an update function -- TODO!!") # DEBUG / 
+	else:
+		print("INFO: NO EVENT RETRIEVE FROM FACEBOOK - EXITING")
+		return
 
 	# Save history
 	try:
