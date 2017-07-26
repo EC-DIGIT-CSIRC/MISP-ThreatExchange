@@ -28,6 +28,7 @@
     "Type": {
         "DOMAIN": "domain",
         "IP_ADDRESS": "ip-dst",
-        "URI": "url"
+        "URI": "url",
+        "REGISTRY_KEY" : "regkey"
     }
 }

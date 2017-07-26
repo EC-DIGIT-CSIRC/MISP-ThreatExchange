@@ -263,7 +263,7 @@ class MISP():
 		# Enrich description
 		if "description" in teevent.keys():
 			mispevt.info = mispevt.info + " - %s" % teevent["description"]
-		if "owner" in teevent.keys() and "name" in teevent["owner"].keys():
+		if ("owner" in teevent.keys()) and ("name" in teevent["owner"].keys()) and ("email" in teevent["owner"].keys()):
 			owner = teevent["owner"]["name"]
 			email = teevent["owner"]["email"].replace("\\u0040", "@")
 			mispevt.info = mispevt.info + " - by %s (%s)" % (owner, email)
@@ -336,6 +336,7 @@ class MISP():
 		except Exception as e:
 			print("IMPOSSIBLE TO LOAD MAPPINGS from %s" % mapfile)
 			print(e)
+			sys.exit(0)
 		return
 
 # --------------------------------------------------------------------------- #
