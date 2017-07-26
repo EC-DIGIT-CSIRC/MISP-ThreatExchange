@@ -29,6 +29,7 @@
         "DOMAIN": "domain",
         "IP_ADDRESS": "ip-dst",
         "URI": "url",
-        "REGISTRY_KEY" : "regkey"
+        "REGISTRY_KEY" : "regkey",
+        "BASE10TIMESTAMP" : "other"
     }
 }

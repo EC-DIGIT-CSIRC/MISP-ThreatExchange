@@ -23,6 +23,7 @@
 		- handle changes in status (UNKNOWN, MALICIOUS, NONMALICIOUS) (update function)
 		- implement auto publish
 		- control of https certificate (see https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings n)
+		- improve mapping of type (pe. BASE10TIMESTAMP)
 
 	Version: 0.000000003 :)
 
@@ -58,6 +59,8 @@ except:
 # Import configuration.py with API keys
 import configuration
 
+# Simulation mode (for debug) - don't create MISP event
+simulate = False # nothing will be done if set to True
 
 # --------------------------------------------------------------------------- #
 
@@ -238,6 +241,7 @@ class MISP():
 		mispevt = MISPEvent()
 		mispevt.info = "[Facebook ThreatExchange]"
 		mispevt.distribution = 0
+
 		mispevt.sharing_group_id = self.privacy_levels[teevent["privacy_type"]]
 
 		# Check if event is to be kept
@@ -263,9 +267,12 @@ class MISP():
 		# Enrich description
 		if "description" in teevent.keys():
 			mispevt.info = mispevt.info + " - %s" % teevent["description"]
-		if ("owner" in teevent.keys()) and ("name" in teevent["owner"].keys()) and ("email" in teevent["owner"].keys()):
+		if "owner" in teevent.keys() and "name" in teevent["owner"].keys():
 			owner = teevent["owner"]["name"]
-			email = teevent["owner"]["email"].replace("\\u0040", "@")
+			if("email" in teevent["owner"].keys()):
+				email = teevent["owner"]["email"].replace("\\u0040", "@")
+			else:
+				email = ""
 			mispevt.info = mispevt.info + " - by %s (%s)" % (owner, email)
 
 		# Add sharing indicators (tags)
@@ -277,9 +284,77 @@ class MISP():
 		if self.extra_tag is not None:
 			mispevt.Tag.append(self.extra_tag)
 
-		# all done :)
 		evtid = teevent["id"]
 		return [evtid, mispevt]
+
+
+	def convertTEtoMISPTEST(self, teevents=[]):
+		"""
+			Convert a ThreatExchange entry to MISP entry
+		"""
+		# Create empty event
+		mispevt = MISPEvent()
+		mispevt.info = "[Facebook ThreatExchange]"
+		mispevt.distribution = 0
+		mispevt.category = "Network activity"
+
+		share_level = "WHITE"
+		evtids = []
+		for teevent in teevents:
+
+			# Set event visiblity to VISIBLE except if stated otherwise in event
+			if(self.privacy_levels[teevent["privacy_type"]] != self.privacy_levels["VISIBLE"]):
+				mispevt.sharing_group_id = self.privacy_levels[teevent["privacy_type"]]
+			else:
+				mispevt.sharing_group_id = self.privacy_levels["VISIBLE"]
+
+			# Check if event is to be kept
+			if "status" in teevent.keys() and teevent["status"] in self.score.keys() and self.score[teevent["status"]] < self.badness_threshold :
+				print("IGNORE EVENT %s due to status (%s)" % (teevent, teevent["status"]))
+				continue
+
+			# Add indicator to event
+			if "raw_indicator" in teevent.keys():
+				if "type" in teevent.keys():
+					if teevent["type"] in self.type_map.keys():
+						indicator = teevent["raw_indicator"].replace("\\", "")
+						mispevt.add_attribute(self.type_map[teevent["type"]] , indicator) # not to brutal??
+					else:
+						print("WARNING: TYPE %s SHOULD BE ADDED TO MAPPING" % teevent["type"])
+
+			# Enrich description - last will be kept :-S
+			if "description" in teevent.keys():
+				mispevt.info = mispevt.info + " - %s" % teevent["description"]
+
+			# Ownership - last will be kept :-S	
+			if "owner" in teevent.keys() and "name" in teevent["owner"].keys():
+				owner = teevent["owner"]["name"]
+				if("email" in teevent["owner"].keys()):
+					email = teevent["owner"]["email"].replace("\\u0040", "@")
+				else:
+					email = ""
+				mispevt.info = mispevt.info + " - by %s (%s)" % (owner, email)
+
+			# Add sharing indicators (tags) - keep more strict
+			if "share_level" in teevent.keys():
+				if teevent["share_level"] in self.share_levels.keys(): # sharing level has to be reduced
+					if int(self.share_levels[share_level]["id"]) > int(self.share_levels[teevent["share_level"]]["id"]):
+						share_level = teevent["share_level"]
+				else:
+					print("WARNING: SHARING LEVEL %s SHOULD BE ADDED TO MAPPING" % teevent["share_level"])
+
+			# Add Extra Tags
+			if self.extra_tag is not None:
+				mispevt.Tag.append(self.extra_tag)
+
+			# Add ID to list of ID making this event
+			evtids.append(teevent["id"])
+
+		# Set share level
+		mispevt.Tag.append(self.share_levels[share_level])
+
+		# Return new MISP event ready for import
+		return [evtids, mispevt]
 
 
 	def createEvent(self, mispevent):
@@ -323,7 +398,6 @@ class MISP():
 		try:
 			fd = open(mapfile, "r")
 			mappings = json.load(fd)
-			print("DEBUG MAPPINGS: %s" % mappings)
 			if "Sharing" in mappings.keys():
 				self.share_levels = mappings["Sharing"]
 			if "Type" in mappings.keys():
@@ -341,14 +415,27 @@ class MISP():
 
 # --------------------------------------------------------------------------- #
 
-def mergeFacebookEvents(events):
+def groupFacebookEventsByOwner(events):
 	"""
-		Merge multiple-linked events to a single MISP one
+		Merge multiple-linked events to a single MISP one.
+
+		Currently, merge all events passed in the Threats structure per owner.
+		Keep the original structure too.
 	"""
-	return
+	threats = {}
+	threats["data"] = []
+	threats["owner"] = {}
+	
+	# Merge events by owner (event reporter?)
+	for event in events["data"]:
+		if(not event["owner"]["name"] in threats["owner"].keys()):
+			threats["owner"][event["owner"]["name"]] = []
+		threats["owner"][event["owner"]["name"]].append(event)
+		threats["data"].append(event)
+	return threats
 
 
-def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
+def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
 	# Open connection to MISP w/ proxy handling if required
 	proxies = None
 	if configuration.MISP_PROXY:
@@ -377,14 +464,39 @@ def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json"):
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	if threats is not None:
-		for event in threats["data"]:
-			[teevtid, mispevt] = misp.convertTEtoMISP(event)
-			if(teevtid not in history.keys()):
-				mispid = misp.createEvent(mispevt)
-				history[teevtid] = mispid
+		threats = groupFacebookEventsByOwner(threats)
+
+		# set events differently based on type of structure passed
+		events = None
+		if(type(threats[creationkey]) == dict):
+			events = threats[creationkey].values()
+		else:
+			events = threats[creationkey]
+
+		# Loop on events
+		for event in events:
+			teevids = []
+			# if merged event, create merge events
+			# should be a single function handling list of 1 or more events
+			if(type(event) == list):
+				[teevtids, mispevt] = misp.convertTEtoMISPTEST(event)  
+			# raw download, 1:1 creation in MISP
 			else:
-				print("EVENT: %s already in MISP under ID: %s" % (teevtid, history[teevtid]))
-				print("DEBUG -- need to implement an update function -- TODO!!") # DEBUG / 
+				[teevtid, mispevt] = misp.convertTEtoMISP(event)
+				teevids = [teevtid]
+
+			# @TODO - Improve this piece of code - really poor :(
+			found = False
+			for teevid in teevids:
+				if(teevtid in history.keys()):
+					found = True
+					print("TODO - update event %d with new teevid (or updated teevid) %d" % (history[teevtid], teevid))
+				else:
+					if not simulate:
+						mispid = misp.createEvent(mispevt)
+						history[teevtid] = mispid
+					else:
+						print("SIMULATE: would have created event into MISP")
 	else:
 		print("INFO: NO EVENT RETRIEVE FROM FACEBOOK - EXITING")
 		return
