@@ -426,23 +426,16 @@ class MISP():
 		return
 
 # --------------------------------------------------------------------------- #
-def getThreats(histfile="./history.json"):
+def getThreats():
+	"""
+		TODO : add support for cursor
+	"""
 	# Connect to Facebook Threat Exchange	
 	proxies = None
 	if configuration.TX_PROXY:
 		proxies = configuration.PROXIES
 	fb = FacebookTE(configuration.TX_APP_ID, configuration.TX_APP_SECRET, proxies)
 
-	# Load history
-	history = {}
-	if os.path.isfile(histfile):
-		try:
-			fd = open(histfile, "r")
-			history = json.load(fd)
-			fd.close()
-		except Exception as e:
-			print("ERROR: impossible to load history from %s" % histfile)
-			print(e)
 
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
@@ -466,35 +459,36 @@ def getMISP(mapfile="./mapping.json"):
 
 	return misp
 
+def getHistory(histfile="./history.json"):
+	# Load history
+	history = {}
+	if os.path.isfile(histfile):
+		try:
+			fd = open(histfile, "r")
+			history = json.load(fd)
+			fd.close()
+		except Exception as e:
+			print("ERROR: impossible to load history from %s" % histfile)
+			print(e)
 
-def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfile="./mapping.json", histfile="./history.json"):
+	return history
+
+
+def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfile="./mapping.json"):
 	"""
 		Retrieve events from Facebook and generate a MISP feed.
 	"""
-	threats = getThreats(histfile)
+	threats = getThreats()
 	misp = getMISP(mapfile)
 	feed = {}
+	
+	print("DEBUG:")
+	print(threats)
 
 	# Prepare the MISP feedv
-	for threat in threats:
-		teevids = []
+	for threat in threats["data"]:
 		[teevtid, mispevt] = misp.convertTEtoMISP(threat)
-		teevids = [teevtid]
-
-		# @TODO - Improve this piece of code - really poor :(
-		found = False
-		for teevid in teevids:
-			if(teevtid in history.keys()):
-				found = True
-				print("TODO - update event %d with new teevid (or updated teevid) %d" % (history[teevtid], teevid))
-			else:
-				if not simulate:
-					mispid = misp.createEvent(mispevt)
-					history[teevtid] = mispid
-				else:
-					print("SIMULATE: would have created event into MISP")
-        
-		print("-- TO IMPLEMENT: Facebook Threat -> MISP feedentry")
+		feed[teevtid] = mispevt
 
 	# save feed content to manifest
 	try:
@@ -504,15 +498,6 @@ def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfi
 	except Exception as e:
 		print(e)
 		sys.exit('Could not create the manifest file.')
-
-	# Save history
-	try:
-		fd = open(histfile, "w")
-		json.dump(history, fd, sort_keys=True,indent=4,separators=(',', ': '))
-		fd.close()
-	except Exception as e:
-		print("ERROR: impossible to save history to %s" % histfile)
-		print(e)
 
 	# All done ;)
 	return
@@ -539,7 +524,8 @@ def groupFacebookEventsByOwner(events):
 
 
 def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
-	threats = getThreats(histfile)
+	threats = getThreats()
+	history = getHistory(histfile)
 	misp = getMISP(mapfile)
 
 	if threats is not None:
