@@ -234,11 +234,14 @@ class MISP():
 
 	# ----------------------------------------------------------------------- #
 
-	def __init__(self, url, api, proxies=None):
+	def __init__(self, url, api, proxies=None, feed=False):
 		self.url = url
 		self.api = api
 		self.proxies = proxies
-		self.misp = PyMISP(self.url, self.api, ssl=self.sslCheck, out_type='json', debug=self.debug, proxies=self.proxies, cert=None)
+		if not feed:
+			self.misp = PyMISP(self.url, self.api, ssl=self.sslCheck, out_type='json', debug=self.debug, proxies=self.proxies, cert=None)
+		else:
+			self.misp = None
 		return
 
 
@@ -423,16 +426,7 @@ class MISP():
 		return
 
 # --------------------------------------------------------------------------- #
-
 def getThreats(histfile="./history.json"):
-	# Open connection to MISP w/ proxy handling if required
-	proxies = None
-	if configuration.MISP_PROXY:
-		proxies = configuration.PROXIES
-	misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies)
-	if mapfile is not None:
-		misp.loadMapping(mapfile)
-
 	# Connect to Facebook Threat Exchange	
 	proxies = None
 	if configuration.TX_PROXY:
@@ -454,17 +448,37 @@ def getThreats(histfile="./history.json"):
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	return threats
 
+
+def getMISP(mapfile="./mapping.json"):
+	# Open connection to MISP w/ proxy handling if required
+	proxies = None
+	misp = None
+	if configuration.MISP_PROXY:
+		proxies = configuration.PROXIES
+	if configuration.MISP_FEED:
+		misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies, True)
+	else:
+		misp = MISP(configuration.MISP_URI, configuration.MISP_API, proxies, False)
+
+	# load mapping
+	if mapfile is not None:
+		misp.loadMapping(mapfile)
+
+	return misp
+
+
 def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfile="./mapping.json", histfile="./history.json"):
 	"""
 		Retrieve events from Facebook and generate a MISP feed.
 	"""
 	threats = getThreats(histfile)
+	misp = getMISP(mapfile)
 	feed = {}
 
 	# Prepare the MISP feedv
 	for threat in threats:
 		teevids = []
-		[teevtid, mispevt] = misp.convertTEtoMISP(event)
+		[teevtid, mispevt] = misp.convertTEtoMISP(threat)
 		teevids = [teevtid]
 
 		# @TODO - Improve this piece of code - really poor :(
@@ -479,15 +493,6 @@ def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfi
 					history[teevtid] = mispid
 				else:
 					print("SIMULATE: would have created event into MISP")
-
-#    	return {'Orgc': event['Orgc'],
-#            'Tag': tags,
-#            'info': event['info'],
-#            'date': event['date'],
-#            'analysis': event['analysis'],
-#            'threat_level_id': event['threat_level_id'],
-#            'timestamp': event['timestamp']
-#            }
         
 		print("-- TO IMPLEMENT: Facebook Threat -> MISP feedentry")
 
@@ -535,6 +540,7 @@ def groupFacebookEventsByOwner(events):
 
 def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
 	threats = getThreats(histfile)
+	misp = getMISP(mapfile)
 
 	if threats is not None:
 		threats = groupFacebookEventsByOwner(threats)
@@ -611,8 +617,10 @@ def main():
 
 	# TODO - handle the other way round
 	if hasattr(configuration, "MISP_FEED") and configuration.MISP_FEED:
+		print("In feed generation mode")
 		generateMISPFeedFromFacebook(mapping)
 	else:
+		print("Feeding directly MISP")
 		fromFacebookToMISP(mapping)
 
 	# All done ;)
