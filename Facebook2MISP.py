@@ -480,13 +480,14 @@ def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfi
 	"""
 	threats = getThreats()
 	misp = getMISP(mapfile)
-	feed = { "facebookte" : [] }
+	feed = None
 	
 
 	# Prepare the MISP feedv
 	for threat in threats["data"]:
 		[teevtid, mispevt] = misp.convertTEtoMISP(threat)
-		feed["facebookte"].append(mispevt.to_dict())
+		__dump_event_to_json(teevtid, mispevt, outputdir)
+		__add_event_to_manifest(mispevt, os.path.join(outputdir, manifest))				
 
 	# save feed content to manifest
 	try:
@@ -498,6 +499,23 @@ def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfi
 		sys.exit('Could not create the manifest file.')
 
 	# All done ;)
+	return
+
+
+def __dump_event_to_json(eventid, event, outputdir="./"):
+	evtjson = event.to_dict()
+	try:
+		eventid = "%s.json" % eventid
+		eventFile = open(os.path.join(outputdir,eventid), "w")
+		eventFile.write(json.dumps(evtjson))
+		eventFile.close()
+	except Exception as e:
+		print("Impossible to dump event :(")
+		print(e)
+	return
+
+
+def __add_event_to_manifest(event, manifest):
 	return
 
 
