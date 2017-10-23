@@ -480,15 +480,13 @@ def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfi
 	"""
 	threats = getThreats()
 	misp = getMISP(mapfile)
-	feed = {}
+	feed = { "facebookte" : [] }
 	
-	print("DEBUG:")
-	print(threats)
 
 	# Prepare the MISP feedv
 	for threat in threats["data"]:
 		[teevtid, mispevt] = misp.convertTEtoMISP(threat)
-		feed[teevtid] = mispevt
+		feed["facebookte"].append(mispevt.to_dict())
 
 	# save feed content to manifest
 	try:
@@ -604,7 +602,7 @@ def main():
 	# TODO - handle the other way round
 	if hasattr(configuration, "MISP_FEED") and configuration.MISP_FEED:
 		print("In feed generation mode")
-		generateMISPFeedFromFacebook(mapping)
+		generateMISPFeedFromFacebook()
 	else:
 		print("Feeding directly MISP")
 		fromFacebookToMISP(mapping)
