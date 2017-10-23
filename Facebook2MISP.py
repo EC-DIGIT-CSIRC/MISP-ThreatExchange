@@ -474,35 +474,27 @@ def getHistory(histfile="./history.json"):
 	return history
 
 
-def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfile="./mapping.json"):
+def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./output", mapfile="./mapping.json"):
 	"""
 		Retrieve events from Facebook and generate a MISP feed.
 	"""
 	threats = getThreats()
 	misp = getMISP(mapfile)
-	feed = None
+	new_events = {}
 	
 
 	# Prepare the MISP feedv
 	for threat in threats["data"]:
 		[teevtid, mispevt] = misp.convertTEtoMISP(threat)
 		__dump_event_to_json(teevtid, mispevt, outputdir)
-		__add_event_to_manifest(mispevt, os.path.join(outputdir, manifest))				
-
-	# save feed content to manifest
-	try:
-		manifestFile = open(os.path.join(outputdir, manifest), 'w')
-		manifestFile.write(json.dumps(feed))
-		manifestFile.close()
-	except Exception as e:
-		print(e)
-		sys.exit('Could not create the manifest file.')
+		new_events[teevtid] = {}
 
 	# All done ;)
+	__update_manifest(new_events, manifest)
 	return
 
 
-def __dump_event_to_json(eventid, event, outputdir="./"):
+def __dump_event_to_json(eventid, event, outputdir="./output"):
 	evtjson = event.to_dict()
 	try:
 		eventid = "%s.json" % eventid
@@ -515,7 +507,14 @@ def __dump_event_to_json(eventid, event, outputdir="./"):
 	return
 
 
-def __add_event_to_manifest(event, manifest):
+def __update_manifest(newevents, manifest="./manifest.json", outputdir="./output"):
+	try:
+		manifestFile = open(os.path.join(outputdir, manifest), 'w')
+		manifestFile.write(json.dumps(feed))
+		manifestFile.close()
+	except Exception as e:
+		print(e)
+		sys.exit('Could not create the manifest file.')
 	return
 
 
