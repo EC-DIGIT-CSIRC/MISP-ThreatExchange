@@ -108,6 +108,13 @@ class FacebookTE():
 		return json.loads(self.__query_threat_exchange__("threat_indicators", query_params))
 
 
+	def getRelatedIndicators(self, baseIndicator):
+		"""
+			Retrieve indicators linked to baseIndicator
+		"""
+		return json.loads(self.__query_threat_exchange__("%s/related" % baseIndicator))
+
+
 	def retrieveThreatDescriptorsLastNDays(self, numbdays):
 		"""
 			Retrieve the list of published indicators
@@ -463,6 +470,7 @@ def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", crea
 
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
+
 	if threats is not None:
 		threats = groupFacebookEventsByOwner(threats)
 
