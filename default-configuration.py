@@ -17,3 +17,6 @@ MISP_PROXY=False  # set to True if proxy configuration is required to reach MISP
 #		'https' : "http://([username]:[password])@[host]:[port]"
 #	}
 PROXIES=None
+
+# Type of output, set MISP_FEED to True to generate a feed
+MISP_FEED=True

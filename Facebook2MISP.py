@@ -1,4 +1,4 @@
-#!/usr/bin/python2 -O
+#!/usr/bin/python3 -O
 #  -*- coding:utf-8 -*-
 
 """
@@ -25,11 +25,12 @@
 		- control of https certificate (see https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings n)
 		- improve mapping of type (pe. BASE10TIMESTAMP)
 
-	Version: 0.000000003 :)
+	Version: 0.000000004 :)
 
 	CHANGE HISTORY:
 	---------------
 	    - switching to Python 3.x (script not compatible anymore with Python 2.x)
+	    - offer the generation of a MISP feed instead of creating event into MISP
 	    
 
 	Thanks to
@@ -422,27 +423,7 @@ class MISP():
 
 # --------------------------------------------------------------------------- #
 
-def groupFacebookEventsByOwner(events):
-	"""
-		Merge multiple-linked events to a single MISP one.
-
-		Currently, merge all events passed in the Threats structure per owner.
-		Keep the original structure too.
-	"""
-	threats = {}
-	threats["data"] = []
-	threats["owner"] = {}
-	
-	# Merge events by owner (event reporter?)
-	for event in events["data"]:
-		if(not event["owner"]["name"] in threats["owner"].keys()):
-			threats["owner"][event["owner"]["name"]] = []
-		threats["owner"][event["owner"]["name"]].append(event)
-		threats["data"].append(event)
-	return threats
-
-
-def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
+def getThreats(histfile="./history.json"):
 	# Open connection to MISP w/ proxy handling if required
 	proxies = None
 	if configuration.MISP_PROXY:
@@ -470,6 +451,36 @@ def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", crea
 
 	# Retrieve event from Facebook
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
+	return threats
+
+def generateMISPFeedFromFacebook(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
+	threats = getThreats(histfile)
+	for threat in threats:
+		print("-- TO IMPLEMENT: Facebook Threat -> MISP feedentry")
+	return
+
+def groupFacebookEventsByOwner(events):
+	"""
+		Merge multiple-linked events to a single MISP one.
+
+		Currently, merge all events passed in the Threats structure per owner.
+		Keep the original structure too.
+	"""
+	threats = {}
+	threats["data"] = []
+	threats["owner"] = {}
+	
+	# Merge events by owner (event reporter?)
+	for event in events["data"]:
+		if(not event["owner"]["name"] in threats["owner"].keys()):
+			threats["owner"][event["owner"]["name"]] = []
+		threats["owner"][event["owner"]["name"]].append(event)
+		threats["data"].append(event)
+	return threats
+
+
+def fromFacebookToMISP(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
+	threats = getThreats(histfile)
 
 	if threats is not None:
 		threats = groupFacebookEventsByOwner(threats)
@@ -545,7 +556,10 @@ def main():
 			mapping = arguments.mapping
 
 	# TODO - handle the other way round
-	fromFacebookToMISP(mapping)
+	if hasattr(configuration, "MISP_FEED") and configuration.MISP_FEED:
+		generateMISPFeedFromFacebook(mapping)
+	else:
+		fromFacebookToMISP(mapping)
 
 	# All done ;)
 	return
