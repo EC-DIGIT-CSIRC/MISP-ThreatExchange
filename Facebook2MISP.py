@@ -24,6 +24,7 @@
 		- implement auto publish
 		- control of https certificate (see https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings n)
 		- improve mapping of type (pe. BASE10TIMESTAMP)
+		- code cleaning / refactoring between MISP event creation / feed generation
 
 	Version: 0.000000004 :)
 
@@ -453,11 +454,64 @@ def getThreats(histfile="./history.json"):
 	threats = fb.retrieveThreatDescriptorsLastNDays(1)
 	return threats
 
-def generateMISPFeedFromFacebook(mapfile="./mapping.json", histfile="./history.json", creationkey="owner"):
+def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./", mapfile="./mapping.json", histfile="./history.json"):
+	"""
+		Retrieve events from Facebook and generate a MISP feed.
+	"""
 	threats = getThreats(histfile)
+	feed = {}
+
+	# Prepare the MISP feedv
 	for threat in threats:
+		teevids = []
+		[teevtid, mispevt] = misp.convertTEtoMISP(event)
+		teevids = [teevtid]
+
+		# @TODO - Improve this piece of code - really poor :(
+		found = False
+		for teevid in teevids:
+			if(teevtid in history.keys()):
+				found = True
+				print("TODO - update event %d with new teevid (or updated teevid) %d" % (history[teevtid], teevid))
+			else:
+				if not simulate:
+					mispid = misp.createEvent(mispevt)
+					history[teevtid] = mispid
+				else:
+					print("SIMULATE: would have created event into MISP")
+
+#    	return {'Orgc': event['Orgc'],
+#            'Tag': tags,
+#            'info': event['info'],
+#            'date': event['date'],
+#            'analysis': event['analysis'],
+#            'threat_level_id': event['threat_level_id'],
+#            'timestamp': event['timestamp']
+#            }
+        
 		print("-- TO IMPLEMENT: Facebook Threat -> MISP feedentry")
+
+	# save feed content to manifest
+	try:
+		manifestFile = open(os.path.join(outputdir, manifest), 'w')
+		manifestFile.write(json.dumps(feed))
+		manifestFile.close()
+	except Exception as e:
+		print(e)
+		sys.exit('Could not create the manifest file.')
+
+	# Save history
+	try:
+		fd = open(histfile, "w")
+		json.dump(history, fd, sort_keys=True,indent=4,separators=(',', ': '))
+		fd.close()
+	except Exception as e:
+		print("ERROR: impossible to save history to %s" % histfile)
+		print(e)
+
+	# All done ;)
 	return
+
 
 def groupFacebookEventsByOwner(events):
 	"""
