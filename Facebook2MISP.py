@@ -41,6 +41,7 @@
 """
 import os
 import ast
+import csv
 import sys
 import json
 import time
@@ -474,16 +475,48 @@ def getHistory(histfile="./history.json"):
 	return history
 
 
-def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./output", mapfile="./mapping.json"):
+def generateMISPFeedFromFacebook(manifest="manifest.json", outputdir="./output", mapfile="./mapping.json", typefeed="csv"):
 	"""
 		Retrieve events from Facebook and generate a MISP feed.
+	"""
+	if typefeed == json:
+		__generate_json_feed(manifest, outputdir, mapfile)
+	else:
+		__generate_csv_feed()
+	return
+
+
+def __generate_csv_feed(csvfile="./feed.csv"):
+	
+	# get all keys
+	threats = getThreats()
+	keys = []
+	for threat in threats["data"]:
+		line = []
+		for key in threat.keys():
+			if key not in keys:
+				keys.append(key)
+
+	# dump CSV to file
+	with open(csvfile, 'w') as csvfile:
+		writer = csv.DictWriter(csvfile, fieldnames=keys)
+		writer.writeheader()
+		for threat in threats["data"]:
+			writer.writerow(threat)
+		csvfile.close()
+
+	return
+
+
+def __generate_json_feed(manifest="manifest.json", outputdir="./output", mapfile="./mapping.json"):
+	"""
+		NOT WORKING!!
 	"""
 	threats = getThreats()
 	misp = getMISP(mapfile)
 	new_events = {}
 	
-
-	# Prepare the MISP feedv
+	# Prepare the MISP feed
 	for threat in threats["data"]:
 		[teevtid, mispevt] = misp.convertTEtoMISP(threat)
 		__dump_event_to_json(teevtid, mispevt, outputdir)

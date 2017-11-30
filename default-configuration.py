@@ -20,3 +20,4 @@ PROXIES=None
 
 # Type of output, set MISP_FEED to True to generate a feed
 MISP_FEED=True
+MISP_FEED_FORMAT="csv" # accepted values are "csv" or "json" 
